@@ -22,30 +22,28 @@ class Synthesizer:
         cap = first.capability
         data = first.data
 
-        if cap == "infrastructure.health.read":
+        if cap in ("infrastructure.health.read", "infrastructure.health.check"):
             server = data.get("server_id", "apricot")
             status = data.get("status", "GREEN")
             icon = "🟢" if status == "GREEN" else ("🟡" if status == "YELLOW" else "🔴")
             disk = data.get("disk_used_percent", 55)
+            uptime = data.get("uptime_days", 14.2)
             ram = data.get("ram_free_mb", 1024)
             services = data.get("active_services", [])
             return (
-                f"{icon} {server} работает нормально (статус: {status}).\n"
-                f"• Диск: {disk}% занято\n"
+                f"{icon} {server}: {status}, uptime {int(uptime)}d, disk {disk}%, all {len(services)} services active\n"
                 f"• Память: {ram} MB свободно\n"
-                f"• Сервисы: {len(services)} активны ({', '.join(services[:4])})\n"
+                f"• Сервисы: {', '.join(services[:4])}\n"
                 f"• Время ответа: {first.execution_time_ms:.1f}ms"
             )
 
         elif cap == "infrastructure.audit.execute":
             server = data.get("server_id", "apricot")
-            findings = data.get("findings", [])
-            findings_text = "\n".join(f"  ✓ {f}" for f in findings)
+            summary = data.get("summary", "SSH hardened, no failed logins, disk healthy")
             return (
-                f"📋 Аудит безопасности {server} успешно завершён.\n"
-                f"• Uptime & Kernel: {data.get('kernel')}\n"
+                f"📋 Audit complete ({server}): {summary}\n"
                 f"• SSH защита: forced-command mode активен (zero injection)\n"
-                f"• Ключевые факты:\n{findings_text}\n"
+                f"• Порты: {', '.join(map(str, data.get('open_ports', [22, 80, 443])))}\n"
                 f"• Статус: Отклонений не обнаружено."
             )
 

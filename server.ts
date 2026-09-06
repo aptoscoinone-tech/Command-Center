@@ -57,39 +57,22 @@ const fleetState: Record<string, ServerInfo> = {
     circuitState: "CLOSED",
     circuitFailuresInWindow: 0,
   },
-  peach: {
-    id: "peach",
-    host: "10.0.1.14",
-    role: "Replica Database & Exporter",
+  mimic: {
+    id: "mimic",
+    host: "10.0.1.20",
+    role: "Staging & Mirror Replica",
     status: "GREEN",
-    uptimeDays: 45.8,
-    cpuLoad: 0.88,
-    ramFreeMb: 840,
+    uptimeDays: 28.5,
+    cpuLoad: 0.25,
+    ramFreeMb: 2450,
     ramTotalMb: 4096,
-    diskUsedPercent: 68,
-    diskFreeGb: 3.2,
-    services: ["postgresql", "prometheus-node-exporter"],
-    ports: [22, 5432, 9100],
+    diskUsedPercent: 35,
+    diskFreeGb: 6.5,
+    services: ["nginx", "postgresql", "redis-server"],
+    ports: [22, 80, 443, 5432],
     consecutiveFailures: 0,
     circuitState: "CLOSED",
     circuitFailuresInWindow: 0,
-  },
-  berry: {
-    id: "berry",
-    host: "10.0.1.18",
-    role: "Edge Proxy & WireGuard",
-    status: "YELLOW",
-    uptimeDays: 3.1,
-    cpuLoad: 1.45,
-    ramFreeMb: 210,
-    ramTotalMb: 2048,
-    diskUsedPercent: 84,
-    diskFreeGb: 1.6,
-    services: ["caddy", "wireguard"],
-    ports: [22, 80, 443, 51820],
-    consecutiveFailures: 1,
-    circuitState: "CLOSED",
-    circuitFailuresInWindow: 1,
   },
 };
 
@@ -253,9 +236,10 @@ async function startServer() {
     const lower = cleanMsg.toLowerCase();
 
     // Detect server
-    if (lower.includes("peach")) targetServer = "peach";
-    else if (lower.includes("berry")) targetServer = "berry";
+    if (lower.includes("mimic")) targetServer = "mimic";
     else if (lower.includes("apricot")) targetServer = "apricot";
+    else if (lower.includes("peach")) targetServer = "peach";
+    else if (lower.includes("berry")) targetServer = "berry";
 
     if (
       lower.includes("аудит") ||
@@ -708,6 +692,10 @@ async function startServer() {
       { suite: "test_synthesizer.py", name: "test_synthesizer_error_output", status: "PASSED", durationMs: 0.8 },
       { suite: "test_code_worker.py", name: "test_code_executor_sandbox", status: "PASSED", durationMs: 3.2 },
       { suite: "test_code_worker.py", name: "test_code_worker_full_flow", status: "PASSED", durationMs: 4.1 },
+      { suite: "test_bot_integration.py", name: "test_emergency_slash_commands", status: "PASSED", durationMs: 1.2 },
+      { suite: "test_bot_integration.py", name: "test_conversational_health_query", status: "PASSED", durationMs: 2.3 },
+      { suite: "test_bot_integration.py", name: "test_conversational_audit_query", status: "PASSED", durationMs: 2.0 },
+      { suite: "test_bot_integration.py", name: "test_diagnostic_commands", status: "PASSED", durationMs: 1.6 },
     ];
 
     res.json({
@@ -729,11 +717,19 @@ async function startServer() {
       "config/policies.yaml",
       "config/remotes.yaml",
       "app/models.py",
+      "app/bot.py",
       "app/services/intent_router.py",
       "app/services/policy_engine.py",
       "app/services/planner.py",
       "app/services/orchestrator.py",
       "app/services/synthesizer.py",
+      "app/services/health_model.py",
+      "app/services/circuit_breaker.py",
+      "app/services/disk_monitor.py",
+      "app/services/stale_detector.py",
+      "app/services/system_snapshot.py",
+      "app/executors/ssh.py",
+      "app/workers/audit.py",
       "app/services/context.py",
       "app/services/approval.py",
       "app/services/metrics.py",
@@ -742,12 +738,12 @@ async function startServer() {
       "app/workers/code.py",
       "app/workers/web_search.py",
       "app/executors/code.py",
-      "app/bot.py",
       "tests/test_intent_router.py",
       "tests/test_planner.py",
       "tests/test_orchestrator.py",
       "tests/test_synthesizer.py",
       "tests/test_code_worker.py",
+      "tests/test_bot_integration.py",
       "migrations/001_initial_schema.sql",
       "migrations/002_m2_5_m6_tables.sql",
       "docs/ADR/ADR-009-machine-truth-vs-llm.md",

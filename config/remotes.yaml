@@ -9,20 +9,11 @@ servers:
     critical_services: ["nginx", "postgresql", "redis-server", "app-worker"]
     profile: "production"
 
-  peach:
-    host: "10.0.1.14"
+  mimic:
+    host: "10.0.1.20"
     port: 22
     user: "cc-executor"
-    role: "replica-db"
-    disk_mount: "/dev/sda1"
-    critical_services: ["postgresql", "prometheus-node-exporter"]
-    profile: "database"
-
-  berry:
-    host: "10.0.1.18"
-    port: 22
-    user: "cc-executor"
-    role: "edge-proxy"
+    role: "staging-mirror"
     disk_mount: "/dev/vda1"
-    critical_services: ["caddy", "wireguard", "fail2ban"]
-    profile: "network"
+    critical_services: ["nginx", "postgresql", "redis-server"]
+    profile: "staging"

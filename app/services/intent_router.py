@@ -1,12 +1,84 @@
-"""Intent Router: Rule-based pre-filter with LLM fallback for user query classification."""
+"""Intent Router: Rule-based pre-filter with OpenRouter LLM fallback for user query classification."""
 
+import json
+import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from app.models import IntentResult, RiskLevel
 
 
 class IntentRouter:
-    KNOWN_SERVERS = ["apricot", "peach", "berry"]
+    KNOWN_SERVERS: List[str] = ["apricot", "mimic"]
+
+    @classmethod
+    def load_known_servers(cls) -> List[str]:
+        """Dynamically load target servers from config/remotes.yaml."""
+        remotes_path = os.path.join(os.getcwd(), "config", "remotes.yaml")
+        if not os.path.exists(remotes_path):
+            return cls.KNOWN_SERVERS
+
+        try:
+            try:
+                import yaml
+                with open(remotes_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
+                    if data and "servers" in data:
+                        servers = list(data["servers"].keys())
+                        if servers:
+                            cls.KNOWN_SERVERS = servers
+                            return servers
+            except ImportError:
+                # Fallback line-based parser if PyYAML is not present
+                servers = []
+                in_servers_block = False
+                with open(remotes_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        stripped = line.strip()
+                        if stripped.startswith("servers:"):
+                            in_servers_block = True
+                            continue
+                        if in_servers_block:
+                            if line.startswith("  ") and not line.startswith("    ") and ":" in stripped:
+                                s_name = stripped.split(":")[0].strip()
+                                if s_name and not s_name.startswith("#"):
+                                    servers.append(s_name)
+                            elif line and not line.startswith(" ") and not line.startswith("#"):
+                                in_servers_block = False
+                if servers:
+                    cls.KNOWN_SERVERS = servers
+                    return servers
+        except Exception:
+            pass
+
+        return cls.KNOWN_SERVERS
+
+    @classmethod
+    def get_intent_classifier_model(cls) -> Dict[str, Any]:
+        """Reads LLM configuration for intent_classifier from config/models.yaml."""
+        models_path = os.path.join(os.getcwd(), "config", "models.yaml")
+        config = {
+            "primary": "google/gemma-4-12b-it",
+            "fallback": "google/gemini-3.8-flash",
+            "timeout_sec": 10,
+            "max_tokens": 500
+        }
+        if not os.path.exists(models_path):
+            return config
+
+        try:
+            try:
+                import yaml
+                with open(models_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
+                    if data and "models" in data and "intent_classifier" in data["models"]:
+                        config.update(data["models"]["intent_classifier"])
+                        return config
+            except ImportError:
+                pass
+        except Exception:
+            pass
+
+        return config
 
     # Rule-based patterns: (regex, intent, risk, capabilities)
     RULES = [
@@ -25,7 +97,7 @@ class IntentRouter:
         ),
         # Audit
         (
-            r"(проведи аудит|сделай аудит|полный аудит|аудит|audit)\s+([a-zA-Z0-9_-]+)?",
+            r"(проведи аудит|сделай аудит|полный аудит|аудит|audit)\s*([a-zA-Z0-9_-]+)?",
             "infrastructure.audit.execute",
             RiskLevel.YELLOW,
             ["infrastructure.audit.execute"]
@@ -95,21 +167,94 @@ class IntentRouter:
 
     @classmethod
     def _extract_server(cls, text: str) -> Optional[str]:
+        cls.load_known_servers()
         text_lower = text.lower()
         for s in cls.KNOWN_SERVERS:
-            if s in text_lower:
+            if s.lower() in text_lower:
                 return s
+
         # Regex search for word after keyword
-        match = re.search(r"(?:сервер[а-я]?|у|для)\s+([a-zA-Z0-9_-]+)", text_lower)
+        match = re.search(r"(?:сервер[а-я]?|у|для|на)\s+([a-zA-Z0-9_-]+)", text_lower)
         if match:
-            candidate = match.group(1)
-            if candidate in cls.KNOWN_SERVERS:
-                return candidate
+            candidate = match.group(1).lower()
+            for s in cls.KNOWN_SERVERS:
+                if s.lower() == candidate:
+                    return s
+        return None
+
+    @classmethod
+    async def _classify_via_openrouter(cls, user_text: str) -> Optional[IntentResult]:
+        """LLM Fallback using OpenRouter API with models from config/models.yaml."""
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            return None
+
+        model_cfg = cls.get_intent_classifier_model()
+        primary_model = model_cfg.get("primary", "google/gemma-4-12b-it")
+        timeout_sec = model_cfg.get("timeout_sec", 10)
+
+        prompt = (
+            f"You are the intent router for server fleet management ({', '.join(cls.KNOWN_SERVERS)}).\n"
+            f"User query: '{user_text}'\n\n"
+            f"Classify into JSON format:\n"
+            f'{{"intent": "infrastructure.health.read|infrastructure.audit.execute|infrastructure.disk.check|infrastructure.circuit.status|system.snapshot.get|code.task.generate_and_review|research.web.investigate|general.query", '
+            f'"risk": "GREEN|YELLOW|RED", '
+            f'"server": "apricot|mimic|null", '
+            f'"required_capabilities": ["..."]}}'
+        )
+
+        try:
+            import urllib.request
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://command-center.local",
+                "X-Title": "Command Center v2.0"
+            }
+            payload = {
+                "model": primary_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.1
+            }
+
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                result_data = json.loads(resp.read().decode("utf-8"))
+                content = result_data["choices"][0]["message"]["content"]
+                json_match = re.search(r"\{[\s\S]*\}", content)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                    risk_str = parsed.get("risk", "GREEN")
+                    risk_level = RiskLevel.GREEN
+                    if risk_str == "YELLOW":
+                        risk_level = RiskLevel.YELLOW
+                    elif risk_str == "RED":
+                        risk_level = RiskLevel.RED
+
+                    target_s = parsed.get("server")
+                    if target_s not in cls.KNOWN_SERVERS:
+                        target_s = cls.KNOWN_SERVERS[0]
+
+                    return IntentResult(
+                        intent=parsed.get("intent", "general.query"),
+                        risk=risk_level,
+                        required_capabilities=parsed.get("required_capabilities", []),
+                        target_server=target_s,
+                        params={"raw_query": user_text, "server_id": target_s},
+                        confidence=0.88,
+                        classification_method="openrouter_llm_fallback"
+                    )
+        except Exception:
+            pass
+
         return None
 
     @classmethod
     async def classify(cls, user_text: str, llm_client: Optional[Any] = None) -> IntentResult:
-        """Classify user text using rule-based pre-filter or LLM fallback."""
+        """Classify user text using rule-based pre-filter or OpenRouter LLM fallback."""
+        cls.load_known_servers()
         cleaned_text = user_text.strip().lower()
         target_server = cls._extract_server(user_text)
 
@@ -119,41 +264,35 @@ class IntentRouter:
             if match:
                 server = target_server
                 if not server and match.lastindex and match.lastindex >= 2:
-                    potential_server = match.group(2)
-                    if potential_server in cls.KNOWN_SERVERS:
-                        server = potential_server
+                    potential = match.group(2)
+                    if potential and potential.lower() in [s.lower() for s in cls.KNOWN_SERVERS]:
+                        server = potential.lower()
+
+                resolved_server = server if server in cls.KNOWN_SERVERS else cls.KNOWN_SERVERS[0]
 
                 return IntentResult(
                     intent=intent,
                     risk=risk,
                     required_capabilities=caps,
-                    target_server=server or "apricot",
-                    params={"raw_query": user_text, "server_id": server or "apricot"},
+                    target_server=resolved_server,
+                    params={"raw_query": user_text, "server_id": resolved_server},
                     confidence=0.98,
                     classification_method="rule_based"
                 )
 
-        # 2. LLM Fallback (if rule didn't match and llm_client provided)
-        if llm_client:
-            try:
-                prompt = (
-                    f"Classify user intention for server management system: '{user_text}'.\n"
-                    f"Available intents: health.check, audit.execute, disk.check, circuit.status, "
-                    f"backup.status, code.generate, research.web, general.qa.\n"
-                    f"Return single JSON: {{\"intent\": \"...\", \"risk\": \"GREEN|YELLOW|RED\", \"server\": \"apricot|peach|berry|null\"}}"
-                )
-                # LLM classification call...
-                # Handled via server-side Gemini
-            except Exception:
-                pass
+        # 2. OpenRouter LLM Fallback
+        openrouter_res = await cls._classify_via_openrouter(user_text)
+        if openrouter_res:
+            return openrouter_res
 
-        # Default fallback
+        # 3. Default fallback
+        fallback_server = target_server or cls.KNOWN_SERVERS[0]
         return IntentResult(
-            intent="general.qa",
+            intent="general.query",
             risk=RiskLevel.GREEN,
-            required_capabilities=["infrastructure.health.read"],
-            target_server=target_server or "apricot",
-            params={"raw_query": user_text},
-            confidence=0.6,
-            classification_method="fallback_default"
+            required_capabilities=[],
+            target_server=fallback_server,
+            params={"raw_query": user_text, "server_id": fallback_server},
+            confidence=0.5,
+            classification_method="rule_based"
         )

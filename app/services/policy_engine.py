@@ -5,8 +5,16 @@ from app.models import KillSwitchState, RiskLevel, FailureType
 
 
 class PolicyEngine:
+    _instance: Optional["PolicyEngine"] = None
+
     def __init__(self, initial_kill_switch: KillSwitchState = KillSwitchState.NORMAL):
         self.kill_switch_state = initial_kill_switch
+
+    @classmethod
+    def get_instance(cls) -> "PolicyEngine":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def set_kill_switch(self, new_state: KillSwitchState) -> None:
         self.kill_switch_state = new_state
