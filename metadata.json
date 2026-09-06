@@ -1,0 +1,6 @@
+{
+  "name": "Command Center",
+  "description": "Autonomous AI orchestrator for remote server fleet management via conversational Telegram interface, Policy Engine, Capability Registry, and Observability.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

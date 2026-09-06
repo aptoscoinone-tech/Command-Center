@@ -1,0 +1,112 @@
+# Command Center - Capability Registry (ADR-012)
+# Schema: description, risk, executor, input_schema, output_schema, requires_policy_check
+
+capabilities:
+  infrastructure.health.read:
+    description: "Проверка состояния сервера (uptime, cpu, ram, disk, services)"
+    risk: "GREEN"
+    executor: "HealthModelExecutor"
+    requires_policy_check: true
+    input_schema:
+      server_id: "string"
+    output_schema:
+      server_id: "string"
+      status: "GREEN | YELLOW | RED | UNKNOWN"
+      cpu_load: "float"
+      ram_free_mb: "int"
+      disk_used_percent: "int"
+      active_services: "list[string]"
+      consecutive_failures: "int"
+
+  infrastructure.audit.execute:
+    description: "Комплексный аудит безопасности, портов, логов и системных метрик сервера"
+    risk: "YELLOW"
+    executor: "AuditWorkerExecutor"
+    requires_policy_check: true
+    input_schema:
+      server_id: "string"
+      deep_scan: "boolean"
+    output_schema:
+      server_id: "string"
+      facts: "object"
+      llm_summary: "string"
+      findings: "list[string]"
+
+  infrastructure.disk.check:
+    description: "Мониторинг дискового пространства всех разделов с дедупликацией предупреждений"
+    risk: "GREEN"
+    executor: "DiskMonitorExecutor"
+    requires_policy_check: true
+    input_schema:
+      server_id: "string (optional, all if empty)"
+    output_schema:
+      disks: "list[object]"
+      critical_count: "int"
+
+  infrastructure.circuit.status:
+    description: "Получение состояний circuit breaker для всех управляемых серверов"
+    risk: "GREEN"
+    executor: "CircuitBreakerExecutor"
+    requires_policy_check: false
+    input_schema: {}
+    output_schema:
+      states: "map[string, object]"
+
+  execution.stale.check:
+    description: "Обнаружение и очистка зависших задач по lease timeout"
+    risk: "GREEN"
+    executor: "StaleDetectorExecutor"
+    requires_policy_check: false
+    input_schema:
+      threshold_seconds: "int"
+    output_schema:
+      stale_cleaned: "int"
+
+  backup.snapshot.status:
+    description: "Проверка статуса бэкапов restic и валидация последнего restore-test"
+    risk: "GREEN"
+    executor: "BackupMonitorExecutor"
+    requires_policy_check: true
+    input_schema: {}
+    output_schema:
+      last_snapshot: "string"
+      geo_redundancy: "boolean"
+      restore_validation: "GREEN | YELLOW | RED"
+
+  code.task.generate_and_review:
+    description: "Генерация кода, запуск тестов и авто-ревью кода через модель-ревьюер (M3)"
+    risk: "YELLOW"
+    executor: "CodeWorkerExecutor"
+    requires_policy_check: true
+    input_schema:
+      prompt: "string"
+      language: "string"
+    output_schema:
+      code: "string"
+      tests: "string"
+      test_passed: "boolean"
+      review: "string"
+
+  research.web.investigate:
+    description: "Автономное веб-исследование темы с извлечением источников и синтезом отчёта (M4)"
+    risk: "GREEN"
+    executor: "WebSearchWorkerExecutor"
+    requires_policy_check: true
+    input_schema:
+      query: "string"
+    output_schema:
+      summary: "string"
+      key_findings: "list[string]"
+      sources: "list[object]"
+
+  infrastructure.service.restart:
+    description: "Перезапуск системного сервиса на удалённом сервере (требует подтверждения)"
+    risk: "RED"
+    executor: "RemoteCommandExecutor"
+    requires_policy_check: true
+    input_schema:
+      server_id: "string"
+      service_name: "string"
+    output_schema:
+      success: "boolean"
+      stdout: "string"

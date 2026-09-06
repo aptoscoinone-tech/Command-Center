@@ -1,0 +1,28 @@
+# Policy Engine Configuration & Kill Switch settings
+kill_switch:
+  initial_state: "NORMAL" # NORMAL | READ_ONLY | EMERGENCY_STOP
+  persisted_in_db: true
+
+roles:
+  admin:
+    allowed_risks: ["GREEN", "YELLOW", "RED"]
+    can_toggle_kill_switch: true
+    require_approval_for_red: true
+  operator:
+    allowed_risks: ["GREEN", "YELLOW"]
+    can_toggle_kill_switch: false
+    require_approval_for_red: true
+  readonly:
+    allowed_risks: ["GREEN"]
+    can_toggle_kill_switch: false
+    require_approval_for_red: true
+
+rate_limits:
+  max_requests_per_minute: 30
+  max_concurrent_tasks: 3
+
+circuit_breaker:
+  failure_threshold: 3
+  time_window_seconds: 120
+  half_open_timeout_seconds: 60
+  probe_capability: "infrastructure.health.read"

@@ -1,0 +1,28 @@
+# Managed Server Fleet Configuration (Forced-Command OpenSSH)
+servers:
+  apricot:
+    host: "10.0.1.12"
+    port: 22
+    user: "cc-executor"
+    role: "primary-app"
+    disk_mount: "/dev/sda1"
+    critical_services: ["nginx", "postgresql", "redis-server", "app-worker"]
+    profile: "production"
+
+  peach:
+    host: "10.0.1.14"
+    port: 22
+    user: "cc-executor"
+    role: "replica-db"
+    disk_mount: "/dev/sda1"
+    critical_services: ["postgresql", "prometheus-node-exporter"]
+    profile: "database"
+
+  berry:
+    host: "10.0.1.18"
+    port: 22
+    user: "cc-executor"
+    role: "edge-proxy"
+    disk_mount: "/dev/vda1"
+    critical_services: ["caddy", "wireguard", "fail2ban"]
+    profile: "network"

@@ -1,0 +1,39 @@
+# OpenRouter / Gemini Models configuration
+default_provider: "gemini" # or openrouter
+
+models:
+  planner:
+    primary: "deepseek/deepseek-chat-v3.1"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 30
+    max_tokens: 2000
+
+  intent_classifier:
+    primary: "google/gemma-4-12b-it"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 10
+    max_tokens: 500
+
+  synthesizer:
+    primary: "google/gemma-4-12b-it"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 25
+    max_tokens: 1500
+
+  coder:
+    primary: "qwen/qwen3-30b-a3b-instruct"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 45
+    max_tokens: 3000
+
+  reviewer:
+    primary: "deepseek/deepseek-chat-v3.1"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 30
+    max_tokens: 2000
+
+  researcher:
+    primary: "google/gemma-4-31b-it"
+    fallback: "google/gemini-3.8-flash"
+    timeout_sec: 40
+    max_tokens: 2500
